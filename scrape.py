@@ -4,17 +4,24 @@ import asyncio
 import cgi
 from contextlib import contextmanager
 import functools
-import logging
 import os
 import pathlib
 
 import blessings
 from bs4 import BeautifulSoup
-import coloredlogs
 import progressbar
 
+from absl import app
+from absl import flags
+from absl import logging
 import aiofiles
 import aiohttp
+
+FLAGS = flags.FLAGS
+
+flags.DEFINE_string('output_dir', 'scrape_results',
+                    'Directory to write scrape output to.')
+FLAGS.verbosity = -1
 
 BANNER = "\n".join((r" ____                                 ",
                     r"/ ___|  ___ _ __ __ _ _ __   ___ _ __ ",
@@ -173,7 +180,7 @@ class Writer(object):
         with TERM.location(*self.location):
             print(string)
 
-async def scrape():
+async def scrape(output_dir):
     """Scrape"""
     url = "http://speedtest.tele2.net/"
     try:
@@ -195,17 +202,20 @@ async def scrape():
         widgets=MAIN_BAR_WIDGETS,
         maxval=1)
     coros_bar.term_width = int(coros_bar.term_width * 0.6)
+
+    pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
     with PROGRESS_MANAGER.install_main(coros_bar):
-        await download_file(url + target_url, "/tmp/")
+        await download_file(url + target_url, output_dir)
 
 def print_banner():
     """Print the colorful blinking banner"""
     print(TERM.magenta + TERM.blink + TERM.bold + BANNER + TERM.normal)
 
-def main():
+def main(_):
     """Main function"""
     # pylint: disable=global-statement
     global PROGRESS_MANAGER
+
     # Enter fullscreen hidden cursor mode
     with TERM.fullscreen(), TERM.hidden_cursor():
         # Instantiate the progress manager
@@ -214,15 +224,11 @@ def main():
         # Start work
         print("\nStarting...")
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(scrape())
+        loop.run_until_complete(scrape(FLAGS.output_dir))
 
 TERM = blessings.Terminal()
 PROGRESS_MANAGER = None
+LOGGER = logging.get_absl_logger()
 
 if __name__ == "__main__":
-    # Set up logging
-    LOGGER = logging.getLogger("scraper")
-    LOG_LEVEL = logging.WARNING
-    logging.basicConfig(level=LOG_LEVEL)
-    coloredlogs.install(level=LOG_LEVEL, LOGGER=LOGGER)
-    main()
+    app.run(main)
